@@ -1,0 +1,201 @@
+openapi: 3.0.3
+info:
+  title: AgentFlow AI - Conversations & WebSocket API
+  version: 1.0.0
+  description: Conversation management and real-time chat
+
+paths:
+  /api/v1/conversations:
+    get:
+      operationId: listConversations
+      summary: List conversations for current tenant
+      tags: [Conversations]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, escalated, closed] }
+        - name: lead_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Paginated conversation list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        customer: { type: object, properties: { id: { type: string }, name: { type: string }, phone: { type: string } } }
+                        lead: { type: object, properties: { id: { type: string }, status: { type: string } } }
+                        status: { type: string }
+                        message_count: { type: integer }
+                        started_at: { type: string, format: date-time }
+                        ended_at: { type: string, format: date-time, nullable: true }
+                        escalated_to: { type: string, format: uuid, nullable: true }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+
+  /api/v1/conversations/{conversation_id}:
+    get:
+      operationId: getConversation
+      summary: Get conversation with full message history
+      tags: [Conversations]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Full conversation with messages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  customer: { type: object }
+                  lead: { type: object }
+                  status: { type: string }
+                  messages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        role: { type: string }
+                        content: { type: string }
+                        timestamp: { type: string, format: date-time }
+                        tool_calls: { type: array, nullable: true }
+                        metadata: { type: object, nullable: true }
+                  started_at: { type: string, format: date-time }
+                  ended_at: { type: string, format: date-time, nullable: true }
+                  escalated_to: { type: object, nullable: true }
+                  escalated_reason: { type: string, nullable: true }
+
+  /api/v1/conversations/{conversation_id}/close:
+    post:
+      operationId: closeConversation
+      summary: Close a conversation (staff or admin)
+      tags: [Conversations]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Conversation closed
+
+  /api/v1/conversations/{conversation_id}/escalate:
+    post:
+      operationId: escalateConversation
+      summary: Manually escalate a conversation to staff
+      tags: [Conversations]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Conversation escalated, staff notified
+
+  # Chat widget public endpoint (no auth, tenant-scoped)
+  /api/v1/widget/conversations/{tenant_id}/send:
+    post:
+      operationId: sendWidgetMessage
+      summary: Send message to AI (widget public endpoint)
+      tags: [Widget]
+      security: [{ ApiKeyAuth: [] }]
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  maxLength: 2000
+                conversation_id:
+                  type: string, format: uuid
+                  description: Resume existing conversation
+                customer_id:
+                  type: string, format: uuid
+                  description: Identify returning customer
+      responses:
+        '200':
+          description: AI response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversation_id: { type: string, format: uuid }
+                  message: { type: string }
+                  lead_id: { type: string, format: uuid }
+                  confidence: { type: number }
+                  should_escalate: { type: boolean }
+        '429':
+          description: Rate limit exceeded
+
+  # WebSocket for real-time chat
+  /api/v1/ws/chat/{tenant_id}:
+    get:
+      operationId: websocketChat
+      summary: WebSocket connection for real-time chat
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: conversation_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: token
+          in: query
+          schema: { type: string }
+      responses:
+        '400':
+          description: Invalid tenant or token
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Tenant-Key
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []

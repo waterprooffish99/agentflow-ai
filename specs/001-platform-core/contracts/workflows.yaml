@@ -1,0 +1,229 @@
+openapi: 3.0.3
+info:
+  title: AgentFlow AI - Workflows API
+  version: 1.0.0
+  description: AI workflow configuration and execution
+
+paths:
+  /api/v1/workflows:
+    get:
+      operationId: listWorkflows
+      summary: List workflows for current tenant
+      tags: [Workflows]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: is_active
+          in: query
+          schema: { type: boolean }
+        - name: trigger_type
+          in: query
+          schema: { type: string, enum: [appointment_confirmed, lead_cold, no_show, manual, schedule] }
+      responses:
+        '200':
+          description: Workflow list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string, format: uuid }
+                    name: { type: string }
+                    description: { type: string, nullable: true }
+                    trigger_type: { type: string }
+                    is_active: { type: boolean }
+                    last_run_at: { type: string, format: date-time, nullable: true }
+                    run_count: { type: integer }
+                    created_at: { type: string, format: date-time }
+
+    post:
+      operationId: createWorkflow
+      summary: Create a new workflow
+      tags: [Workflows]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, trigger_type, actions]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                trigger_type:
+                  type: string
+                  enum: [appointment_confirmed, lead_cold, no_show, manual, schedule]
+                trigger_config: { type: object }
+                actions:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    properties:
+                      type: { type: string, enum: [send_email, send_sms, log_note, webhook, tag_lead] }
+                      template: { type: string }
+                      channel: { type: string, enum: [email, sms, whatsapp] }
+                      delay: { type: string }
+                      config: { type: object }
+      responses:
+        '201':
+          description: Workflow created
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/workflows/{workflow_id}:
+    get:
+      operationId: getWorkflow
+      summary: Get workflow details with execution history
+      tags: [Workflows]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Workflow details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  name: { type: string }
+                  trigger_type: { type: string }
+                  trigger_config: { type: object }
+                  actions: { type: array }
+                  is_active: { type: boolean }
+                  last_run_at: { type: string, format: date-time }
+                  run_count: { type: integer }
+                  last_run_status: { type: string, nullable: true }
+                  last_run_error: { type: string, nullable: true }
+
+    patch:
+      operationId: updateWorkflow
+      summary: Update workflow configuration
+      tags: [Workflows]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                trigger_config: { type: object }
+                actions: { type: array }
+                is_active: { type: boolean }
+      responses:
+        '200':
+          description: Workflow updated
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      operationId: deleteWorkflow
+      summary: Delete workflow
+      tags: [Workflows]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Workflow deleted
+
+  /api/v1/workflows/{workflow_id}/trigger:
+    post:
+      operationId: triggerWorkflow
+      summary: Manually trigger a workflow for a specific entity
+      tags: [Workflows]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [entity_type, entity_id]
+              properties:
+                entity_type: { type: string, enum: [lead, appointment, customer] }
+                entity_id: { type: string, format: uuid }
+      responses:
+        '202':
+          description: Workflow triggered, execution queued
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/workflows/{workflow_id}/executions:
+    get:
+      operationId: getWorkflowExecutions
+      summary: Get workflow execution history
+      tags: [Workflows]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: workflow_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Execution history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        workflow_id: { type: string, format: uuid }
+                        trigger_type: { type: string }
+                        entity_type: { type: string }
+                        entity_id: { type: string, format: uuid }
+                        status: { type: string }
+                        started_at: { type: string, format: date-time }
+                        completed_at: { type: string, format: date-time, nullable: true }
+                        error: { type: string, nullable: true }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+
+components:
+  responses:
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+
+security:
+  - BearerAuth: []

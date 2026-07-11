@@ -1,0 +1,260 @@
+openapi: 3.0.3
+info:
+  title: AgentFlow AI - Leads API
+  version: 1.0.0
+  description: Lead management endpoints
+
+paths:
+  /api/v1/leads:
+    get:
+      operationId: listLeads
+      summary: List leads for current tenant
+      tags: [Leads]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [unqualified, partially_qualified, qualified, booked, lost, all]
+        - name: assigned_to
+          in: query
+          schema: { type: string, format: uuid }
+        - name: source
+          in: query
+          schema: { type: string }
+        - name: date_from
+          in: query
+          schema: { type: string, format: date }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+      responses:
+        '200':
+          description: Paginated lead list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        customer: { $ref: '#/components/schemas/Customer' }
+                        status: { type: string }
+                        urgency: { type: string }
+                        preferred_service: { type: string, nullable: true }
+                        budget_range: { type: string, nullable: true }
+                        conversation_summary: { type: string, nullable: true }
+                        assigned_to: { type: string, format: uuid, nullable: true }
+                        created_at: { type: string, format: date-time }
+                        updated_at: { type: string, format: date-time }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+
+    post:
+      operationId: createLead
+      summary: Create lead manually (staff)
+      tags: [Leads]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customer]
+              properties:
+                customer:
+                  type: object
+                  required: [name]
+                  properties:
+                    name: { type: string }
+                    email: { type: string, format: email }
+                    phone: { type: string }
+                    location: { type: string }
+                source: { type: string, default: "manual" }
+                notes: { type: string }
+      responses:
+        '201':
+          description: Lead created
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/leads/{lead_id}:
+    get:
+      operationId: getLead
+      summary: Get lead details with customer and conversation history
+      tags: [Leads]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: lead_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Lead details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  customer: { $ref: '#/components/schemas/Customer' }
+                  status: { type: string }
+                  urgency: { type: string }
+                  budget_range: { type: string, nullable: true }
+                  preferred_service: { type: string, nullable: true }
+                  preferred_times: { type: array, items: { type: string } }
+                  conversation_summary: { type: string, nullable: true }
+                  source: { type: string }
+                  assigned_to: { type: string, format: uuid, nullable: true }
+                  conversations: { type: array, items: { $ref: '#/components/schemas/Conversation' } }
+                  appointments: { type: array, items: { $ref: '#/components/schemas/Appointment' } }
+                  created_at: { type: string, format: date-time }
+                  updated_at: { type: string, format: date-time }
+        '404':
+          description: Lead not found
+
+    patch:
+      operationId: updateLead
+      summary: Update lead status, fields, or assignment
+      tags: [Leads]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: lead_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string, enum: [unqualified, partially_qualified, qualified, booked, lost] }
+                urgency: { type: string, enum: [low, medium, high, urgent] }
+                preferred_service: { type: string }
+                budget_range: { type: string }
+                preferred_times: { type: array, items: { type: string } }
+                assigned_to: { type: string, format: uuid, nullable: true }
+      responses:
+        '200':
+          description: Lead updated
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          description: Lead not found
+
+  /api/v1/leads/{lead_id}/notes:
+    post:
+      operationId: addLeadNote
+      summary: Add a note to a lead (CRM interaction)
+      tags: [Leads]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: lead_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, maxLength: 2000 }
+      responses:
+        '201':
+          description: Note added
+        '404':
+          description: Lead not found
+
+  /api/v1/leads/{lead_id}/assign:
+    post:
+      operationId: assignLead
+      summary: Assign lead to a staff member
+      tags: [Leads]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: lead_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Lead assigned
+
+components:
+  schemas:
+    Customer:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        location: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    Conversation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time, nullable: true }
+        message_count: { type: integer }
+        escalated_to: { type: string, format: uuid, nullable: true }
+
+    Appointment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        service_type: { type: string }
+        start_time: { type: string, format: date-time }
+        end_time: { type: string, format: date-time }
+        status: { type: string }
+        created_at: { type: string, format: date-time }
+
+  responses:
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  code: { type: string }
+                  message: { type: string }
+                  field: { type: string, nullable: true }
+                  request_id: { type: string }
+
+security:
+  - BearerAuth: []

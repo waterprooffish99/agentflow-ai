@@ -208,3 +208,10 @@ Wait for consent; never auto-create ADRs. Group related decisions (stacks, authe
 
 ## Code Standards
 See `.specify/memory/constitution.md` for code quality, testing, performance, security, and architecture principles.
+
+## Active Technologies
+- Python 3.12+ (backend), TypeScript 5.x (frontend) + FastAPI, SQLAlchemy 2.x (async), Pydantic v2, Next.js 14, TailwindCSS, Shadcn UI, Framer Motion, OpenRouter SDK (001-platform-core)
+- PostgreSQL 16+ (Neon in production, local Docker in dev), Qdrant (vector store), S3-compatible for media/assets (001-platform-core)
+
+## Recent Changes
+- 001-platform-core: Added Python 3.12+ (backend), TypeScript 5.x (frontend) + FastAPI, SQLAlchemy 2.x (async), Pydantic v2, Next.js 14, TailwindCSS, Shadcn UI, Framer Motion, OpenRouter SDK

@@ -1,0 +1,279 @@
+openapi: 3.0.3
+info:
+  title: AgentFlow AI - Appointments API
+  version: 1.0.0
+  description: Appointment booking and management endpoints
+
+paths:
+  /api/v1/appointments/availability:
+    get:
+      operationId: checkAvailability
+      summary: Check available appointment slots
+      tags: [Appointments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: service_type
+          in: query
+          required: true
+          schema: { type: string }
+        - name: date_from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: date_to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: staff_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Available slots
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slots:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        start_time: { type: string, format: date-time }
+                        end_time: { type: string, format: date-time }
+                        staff_id: { type: string, format: uuid, nullable: true }
+
+  /api/v1/appointments:
+    get:
+      operationId: listAppointments
+      summary: List appointments for current tenant
+      tags: [Appointments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [confirmed, cancelled, rescheduled, completed, no_show] }
+        - name: date_from
+          in: query
+          schema: { type: string, format: date }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date }
+        - name: customer_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Paginated appointment list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        customer: { type: object }
+                        service_type: { type: string }
+                        start_time: { type: string, format: date-time }
+                        end_time: { type: string, format: date-time }
+                        status: { type: string }
+                        notes: { type: string, nullable: true }
+                        created_at: { type: string, format: date-time }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+
+    post:
+      operationId: createAppointment
+      summary: Create appointment (AI or staff)
+      tags: [Appointments]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customer_id, service_type, start_time, end_time]
+              properties:
+                customer_id: { type: string, format: uuid }
+                lead_id: { type: string, format: uuid, nullable: true }
+                service_type: { type: string }
+                start_time: { type: string, format: date-time }
+                end_time: { type: string, format: date-time }
+                notes: { type: string }
+      responses:
+        '201':
+          description: Appointment created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  customer: { type: object }
+                  service_type: { type: string }
+                  start_time: { type: string, format: date-time }
+                  end_time: { type: string, format: date-time }
+                  status: { type: string }
+        '409':
+          description: Slot conflict — overlapping appointment exists
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/appointments/{appointment_id}:
+    get:
+      operationId: getAppointment
+      summary: Get appointment details
+      tags: [Appointments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: appointment_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Appointment details
+        '404':
+          description: Appointment not found
+
+    patch:
+      operationId: updateAppointment
+      summary: Update appointment (reschedule or change details)
+      tags: [Appointments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: appointment_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                start_time: { type: string, format: date-time }
+                end_time: { type: string, format: date-time }
+                service_type: { type: string }
+                status: { type: string }
+                notes: { type: string }
+      responses:
+        '200':
+          description: Appointment updated
+        '409':
+          description: Slot conflict
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/appointments/{appointment_id}/cancel:
+    post:
+      operationId: cancelAppointment
+      summary: Cancel appointment
+      tags: [Appointments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: appointment_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Appointment cancelled, notifications sent
+        '400':
+          description: Appointment already cancelled
+
+  /api/v1/appointments/{appointment_id}/reschedule:
+    post:
+      operationId: rescheduleAppointment
+      summary: Reschedule appointment
+      tags: [Appointments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: appointment_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_start_time, new_end_time]
+              properties:
+                new_start_time: { type: string, format: date-time }
+                new_end_time: { type: string, format: date-time }
+                notes: { type: string }
+      responses:
+        '200':
+          description: Appointment rescheduled, old appointment marked as rescheduled
+        '409':
+          description: New slot conflict
+
+  /api/v1/appointments/{appointment_id}/complete:
+    post:
+      operationId: completeAppointment
+      summary: Mark appointment as completed
+      tags: [Appointments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: appointment_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Appointment marked as completed
+
+  /api/v1/appointments/{appointment_id}/no-show:
+    post:
+      operationId: markNoShow
+      summary: Mark appointment as no-show
+      tags: [Appointments]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: appointment_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Appointment marked as no-show, workflow triggered
+
+components:
+  responses:
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  code: { type: string }
+                  message: { type: string }
+                  field: { type: string, nullable: true }
+
+security:
+  - BearerAuth: []

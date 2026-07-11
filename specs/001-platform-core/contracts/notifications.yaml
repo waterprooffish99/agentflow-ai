@@ -1,0 +1,53 @@
+openapi: 3.0.3
+info:
+  title: AgentFlow AI - Notifications API
+  version: 1.0.0
+  description: Notification management and delivery status
+
+paths:
+  /api/v1/notifications:
+    get:
+      operationId: listNotifications
+      summary: List notifications for current tenant
+      tags: [Notifications]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, sent, failed] }
+        - name: channel
+          in: query
+          schema: { type: string, enum: [email, sms, whatsapp] }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Paginated notification list
+
+  /api/v1/notifications/{notification_id}/retry:
+    post:
+      operationId: retryNotification
+      summary: Retry a failed notification
+      tags: [Notifications]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: notification_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Notification re-queued
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+security:
+  - BearerAuth: []

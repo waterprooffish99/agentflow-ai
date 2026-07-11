@@ -1,0 +1,271 @@
+openapi: 3.0.3
+info:
+  title: AgentFlow AI - Tenant & User API
+  version: 1.0.0
+  description: Tenant and user management endpoints
+
+paths:
+  # Tenant Management
+  /api/v1/tenants/me:
+    get:
+      operationId: getMyTenant
+      summary: Get current tenant details
+      tags: [Tenants]
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Current tenant details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  business_name: { type: string }
+                  domain: { type: string, nullable: true }
+                  timezone: { type: string }
+                  subscription_tier: { type: string }
+                  status: { type: string }
+                  settings: { type: object }
+                  created_at: { type: string, format: date-time }
+    patch:
+      operationId: updateMyTenant
+      summary: Update current tenant settings
+      tags: [Tenants]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                business_name: { type: string }
+                timezone: { type: string }
+                domain: { type: string }
+                settings: { type: object }
+      responses:
+        '200':
+          description: Tenant updated
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  # User Management
+  /api/v1/users:
+    get:
+      operationId: listUsers
+      summary: List users in tenant
+      tags: [Users]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: role
+          in: query
+          schema: { type: string, enum: [business_admin, staff] }
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, inactive] }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+      responses:
+        '200':
+          description: Paginated list of users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/User' } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+
+  /api/v1/users/{user_id}:
+    get:
+      operationId: getUser
+      summary: Get user by ID
+      tags: [Users]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: User details
+        '404':
+          description: User not found
+
+    patch:
+      operationId: updateUser
+      summary: Update user (role, status, name)
+      tags: [Users]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { type: string, enum: [business_admin, staff] }
+                status: { type: string, enum: [active, inactive] }
+                full_name: { type: string }
+      responses:
+        '200':
+          description: User updated
+        '403':
+          description: Insufficient permissions
+
+    delete:
+      operationId: deactivateUser
+      summary: Deactivate user (soft delete)
+      tags: [Users]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: User deactivated
+
+  /api/v1/users/invite:
+    post:
+      operationId: inviteUser
+      summary: Invite a new staff user
+      tags: [Users]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string, format: email }
+                role: { type: string, enum: [business_admin, staff] }
+                full_name: { type: string }
+      responses:
+        '201':
+          description: Invitation sent
+        '409':
+          description: User with this email already exists
+
+  # Platform Admin (Super Admin only)
+  /api/v1/admin/tenants:
+    get:
+      operationId: listAllTenants
+      summary: List all tenants (platform admin)
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, suspended, trial, all] }
+        - name: tier
+          in: query
+          schema: { type: string, enum: [free, starter, growth, enterprise] }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Paginated list of all tenants
+        '403':
+          description: Super admin only
+
+  /api/v1/admin/tenants/{tenant_id}/suspend:
+    post:
+      operationId: suspendTenant
+      summary: Suspend a tenant
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Tenant suspended
+        '403':
+          description: Super admin only
+
+  /api/v1/admin/platform-metrics:
+    get:
+      operationId: getPlatformMetrics
+      summary: Get platform-wide aggregate metrics
+      tags: [Admin]
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Platform metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_tenants: { type: integer }
+                  active_tenants: { type: integer }
+                  total_leads: { type: integer }
+                  total_bookings: { type: integer }
+                  monthly_revenue: { type: number }
+                  platform_metrics:
+                    type: object
+                    properties:
+                      avg_conversion_rate: { type: number }
+                      total_conversations: { type: integer }
+                      escalation_rate: { type: number }
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        role: { type: string }
+        full_name: { type: string }
+        status: { type: string }
+        email_verified: { type: boolean }
+        last_login: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
+  responses:
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  code: { type: string }
+                  message: { type: string }
+                  field: { type: string, nullable: true }
+
+security:
+  - BearerAuth: []

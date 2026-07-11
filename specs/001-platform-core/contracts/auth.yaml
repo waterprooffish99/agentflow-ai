@@ -1,0 +1,222 @@
+openapi: 3.0.3
+info:
+  title: AgentFlow AI - Auth API
+  version: 1.0.0
+  description: Authentication and authorization endpoints
+
+paths:
+  /api/v1/auth/register:
+    post:
+      operationId: registerTenant
+      summary: Register new business tenant
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [business_name, email, password]
+              properties:
+                business_name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                email:
+                  type: string
+                  format: email
+                  maxLength: 255
+                password:
+                  type: string
+                  minLength: 8
+                  maxLength: 128
+      responses:
+        '201':
+          description: Tenant created, verification email sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tenant_id: { type: string, format: uuid }
+                  message: { type: string }
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /api/v1/auth/verify-email:
+    post:
+      operationId: verifyEmail
+      summary: Verify email address with token
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: Email verification token from link
+      responses:
+        '200':
+          description: Email verified, account activated
+        '400':
+          description: Invalid or expired token
+
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      summary: Login with email and password
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Login successful, JWT tokens issued
+          headers:
+            Set-Cookie:
+              description: HTTP-only refresh token cookie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  token_type: { type: string, example: "bearer" }
+                  expires_in: { type: integer }
+                  user: { $ref: '#/components/schemas/User' }
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/auth/refresh:
+    post:
+      operationId: refreshToken
+      summary: Refresh access token using refresh cookie
+      tags: [Auth]
+      responses:
+        '200':
+          description: New access token issued
+          headers:
+            Set-Cookie:
+              description: Updated refresh token cookie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  expires_in: { type: integer }
+        '401':
+          description: Refresh token invalid or expired
+
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      summary: Logout and clear refresh token
+      tags: [Auth]
+      responses:
+        '200':
+          description: Logged out successfully
+          headers:
+            Set-Cookie:
+              description: Expired refresh token cookie
+
+  /api/v1/auth/reset-password-request:
+    post:
+      operationId: requestPasswordReset
+      summary: Request password reset email
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200':
+          description: Reset email sent if account exists
+        '404':
+          description: No account found with this email
+
+  /api/v1/auth/reset-password-confirm:
+    post:
+      operationId: resetPasswordConfirm
+      summary: Reset password with token
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, new_password]
+              properties:
+                token: { type: string }
+                new_password: { type: string, minLength: 8 }
+      responses:
+        '200':
+          description: Password updated successfully
+        '400':
+          description: Invalid or expired reset token
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { type: string, enum: [super_admin, business_admin, staff] }
+        full_name: { type: string }
+        tenant_id: { type: string, format: uuid, nullable: true }
+        status: { type: string, enum: [active, inactive] }
+        email_verified: { type: boolean }
+        last_login: { type: string, format: date-time, nullable: true }
+
+  responses:
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    ConflictError:
+      description: Resource already exists
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    UnauthorizedError:
+      description: Invalid credentials
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            field: { type: string, nullable: true }
+            request_id: { type: string }

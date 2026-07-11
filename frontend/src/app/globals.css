@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --surface: #f8fafc;
+  --surface-elevated: #ffffff;
+  --ink: #0f172a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 8% 12%, rgba(14, 165, 233, 0.16), transparent 36%),
+    radial-gradient(circle at 92% 14%, rgba(245, 158, 11, 0.2), transparent 34%),
+    var(--surface);
+}
